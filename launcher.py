@@ -15,7 +15,7 @@ from shutil import copyfile
 
 from trainer import get_algo
 from utils.config import cfg, cfg_from_file
-from utils.utils import mkdir_p
+from utils.utils import create_output_dir, mkdir_p
 
 
 dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
@@ -60,39 +60,7 @@ def set_cfg_params(cfg, params):
     return cfg
 
 
-if __name__ == "__main__":
-    # Loading arguments
-    args = parse_args()
-    args.cfg_file = os.path.join("config", args.cfg_file)
-
-    if args.cfg_file is not None:
-        cfg_from_file(args.cfg_file)
-
-    if args.gpu_id != -1:
-        cfg.GPU_ID = args.gpu_id
-
-    # Timestamp and config load
-    now = datetime.datetime.now(dateutil.tz.tzlocal())
-    timestamp = now.strftime("%Y_%m_%d_%H_%M_%S")
-    print(f"Timestamp: {timestamp}")
-    cfg.TIMESTAMP = timestamp
-    output_dir = "results/%s_%s_%s" % (cfg.DATA.DATASET, cfg.CONFIG_NAME, timestamp)
-    cfg.OUTPUT_DIR = output_dir
-    mkdir_p(output_dir)
-    copyfile(args.cfg_file, os.path.join(output_dir, "config.yml"))
-    print("Using config:")
-    pprint.pprint(cfg)
-
-    # Setting seeds for reproducibility
-    print(f"\nPyTorch/Random seed: {args.manual_seed}")
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    random.seed(args.manual_seed)
-    np.random.seed(args.manual_seed)
-    torch.manual_seed(args.manual_seed)
-    if cfg.CUDA:
-        torch.cuda.manual_seed_all(args.manual_seed)
-
+def run_cx_val(cfg):
     param_lr = [float(i) for i in cfg.TRAIN.LR]
     param_l2_coeff = [float(i) for i in cfg.TRAIN.L2_COEFF]
     if cfg.TRAIN.MODEL == "emd":
@@ -114,10 +82,10 @@ if __name__ == "__main__":
             print(f"\nParam: {p}\n")
 
             algo = get_algo(cfg, split_nb)
-            score, concat_pred_test = algo.run()
+            results, concat_pred_test = algo.run()
 
-            val_cindex = score['val']['c_index']
-            test_cindex = score['test']['c_index']
+            val_cindex = results['val']['c_index']
+            test_cindex = results['test']['c_index']
             print(f"\nVal c_index: {val_cindex}")
             print(f"Test c_index: {test_cindex}")
 
@@ -131,3 +99,27 @@ if __name__ == "__main__":
     test_cindices = np.array(test_cindices)
     print(f"\n{test_cindices}")
     print(f"\nTest cindex mean, std: {test_cindices.mean()}, {test_cindices.std()}")
+
+if __name__ == "__main__":
+    # Loading arguments
+    args = parse_args()
+    args.cfg_file = os.path.join("config", args.cfg_file)
+    cfg_from_file(args.cfg_file)
+
+    if args.gpu_id != -1:
+        cfg.GPU_ID = args.gpu_id
+
+    # Setting seeds for reproducibility
+    print(f"\nPyTorch/Random seed: {args.manual_seed}")
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    random.seed(args.manual_seed)
+    np.random.seed(args.manual_seed)
+    torch.manual_seed(args.manual_seed)
+    if cfg.CUDA:
+        torch.cuda.manual_seed_all(args.manual_seed)
+
+    create_output_dir(cfg, args.cfg_file)
+    run_cx_val(cfg)
+
+    
