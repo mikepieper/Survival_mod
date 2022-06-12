@@ -14,7 +14,7 @@ from sklearn.preprocessing import MinMaxScaler
 from datasets.dataset_loader import load_data
 from utils.config import cfg
 from utils.utils import mkdir_p, iterate_minibatches, tgt_equal_tgt, tgt_leq_tgt
-from visualization.figures import plot_train_val_history
+from visualization.figures import plot_history
 
 
 class TrainerBase(object):
@@ -133,45 +133,36 @@ class TrainerBase(object):
             train_iteration = 0
             val_iteration = 0
 
-            for mode in ["train", "val"]:
-                if mode == "train":
-                    if self.verbose:
-                        print(f"\nRunning training epoch {epoch} ...")
-                    self.model.train()
-                    shuffle_batch = True
+            # Train
+            self.model.train()
+            for batch in iterate_minibatches(train, self.batch_size, shuffle=True):
 
-                elif mode == "val":
-                    if self.verbose:
-                        print(f"Running validation epoch {epoch} ...")
-                    self.model.eval()
-                    shuffle_batch = False
+                concat_pred, loss = self.get_pred_loss(batch)
 
-                for batch in iterate_minibatches(train if mode == "train" else val, self.batch_size, shuffle=shuffle_batch):
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-                    concat_pred, loss = self.get_pred_loss(batch)
+                concat_pred_train = np.concatenate((concat_pred_train, concat_pred.data.cpu().numpy()), axis=0)
 
-                    if mode == "train":
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
+                train_epoch_loss += loss.data.item()
+                train_iteration += 1
 
-                        concat_pred_train = np.concatenate((concat_pred_train, concat_pred.data.cpu().numpy()), axis=0)
+            # Val
+            self.model.eval()
+            for batch in iterate_minibatches(val, self.batch_size):
 
-                        train_epoch_loss += loss.data.item()
-                        train_iteration += 1
+                concat_pred, loss = self.get_pred_loss(batch)
 
-                    elif mode == "val":
-                        concat_pred_val = np.concatenate((concat_pred_val, concat_pred.data.cpu().numpy()), axis=0)
+                concat_pred_val = np.concatenate((concat_pred_val, concat_pred.data.cpu().numpy()), axis=0)
 
-                        val_epoch_loss += loss.data.item()
-                        val_iteration += 1
+                val_epoch_loss += loss.data.item()
+                val_iteration += 1
 
             # Record and print result after each epoch
             # Train
             train_full_epoch_loss = train_epoch_loss / train_iteration
             train_err_history.append(train_full_epoch_loss)
-            if self.verbose:
-                print(f"===> Epoch {epoch} Complete: Avg. Train Loss: {train_full_epoch_loss:.4f}")
 
             # concordance_index(time, pred, event)
             train_c_index = concordance_index(concat_pred_train[:, 0], concat_pred_train[:, 2], concat_pred_train[:, 1])
@@ -182,14 +173,10 @@ class TrainerBase(object):
 
             train_cindex_history.append(train_c_index)
 
-            if self.verbose:
-                print(f"===> Epoch {epoch} Complete: Train C-index: {train_c_index:.4f}")
 
             # Val
             val_full_epoch_loss = val_epoch_loss / val_iteration
             val_err_history.append(val_full_epoch_loss)
-            if self.verbose:
-                print(f"===> Epoch {epoch} Complete: Avg. Val Loss: {val_full_epoch_loss:.4f}")
 
             # concordance_index(time, pred, event)
             val_c_index = concordance_index(concat_pred_val[:, 0], concat_pred_val[:, 2], concat_pred_val[:, 1])
@@ -199,20 +186,16 @@ class TrainerBase(object):
                 val_c_index = concordance_index(concat_pred_val[:, 0], -concat_pred_val[:, 2], concat_pred_val[:, 1])
 
             val_cindex_history.append(val_c_index)
-            if self.verbose:
-                print(f"===> Epoch {epoch} Complete: Val C-index: {val_c_index:.4f}")
 
             # Plot training and validation curve
             path = os.path.join(cfg.OUTPUT_DIR, cfg.PARAMS, "Figures/")
             mkdir_p(os.path.dirname(path))
 
-            plot_train_val_history(path, f"error_{split_id}", train_err_history, val_err_history)
+            plot_history(path, f"error_{split_id}", train_err_history, val_err_history)
 
-            plot_train_val_history(path, f"c_index_{split_id}", train_cindex_history, val_cindex_history)
+            plot_history(path, f"c_index_{split_id}", train_cindex_history, val_cindex_history)
 
             if val_c_index > best_c_index:
-                if self.verbose:
-                    print("Saving best model")
                 best_epoch = epoch
                 best_c_index = val_c_index
                 results['train'] = {'avg_loss': train_full_epoch_loss, 'c_index': train_c_index}
@@ -223,22 +206,13 @@ class TrainerBase(object):
                 patience += 1
 
             if patience > self.max_patience:
-                if self.verbose:
-                    print("Max patience reached, ending training")
                 break
 
-        if self.verbose:
-            print("\nDone training, evaluate on test...")
 
         concat_pred_test = np.array([]).reshape(0, 3)
 
         test_epoch_loss = 0
         test_iteration = 0
-
-        # Loading weights of the best model for the test
-        if self.verbose:
-            print(f"Best epoch: {best_epoch}")
-            print(f"Best val C-index: {best_c_index}")
 
         self.load_model_best(split_id)
         self.model.eval()
@@ -253,8 +227,6 @@ class TrainerBase(object):
             test_iteration += 1
 
         test_full_epoch_loss = test_epoch_loss / test_iteration
-        if self.verbose:
-            print(f"===> Avg. Test Loss: {test_full_epoch_loss:.4f}")
 
         # concordance_index(time, pred, event)
         test_c_index = concordance_index(concat_pred_test[:, 0], concat_pred_test[:, 2], concat_pred_test[:, 1])
@@ -263,8 +235,6 @@ class TrainerBase(object):
             # concordance_index(time, pred, event)
             test_c_index = concordance_index(concat_pred_test[:, 0], -concat_pred_test[:, 2], concat_pred_test[:, 1])
 
-        if self.verbose:
-            print(f"===> Test C-index: {test_c_index:.4f}")
 
         results['test'] = {'avg_loss': test_full_epoch_loss, 'c_index': test_c_index}
 

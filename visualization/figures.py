@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 
 
-def plot_train_val_history(path_fig, fig_name, train_hist, val_hist):
+def plot_history(path_fig, fig_name, train_hist, val_hist):
     """
     Plot training and validation history.
 
