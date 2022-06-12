@@ -49,6 +49,17 @@ def parse_args():
     return args
 
 
+def set_cfg_params(cfg, params):
+    cfg.PARAMS = f"LR{params[0]}_L2{params[1]}"
+    cfg.TRAIN.LR = params[0]
+    cfg.TRAIN.L2_COEFF = params[1]
+
+    if cfg.TRAIN.MODEL == "emd":
+        cfg.PARAMS += f"_PRIOR{params[2]}"
+        cfg.EMD.PRIOR = params[2]
+    return cfg
+
+
 if __name__ == "__main__":
     # Loading arguments
     args = parse_args()
@@ -99,15 +110,8 @@ if __name__ == "__main__":
         opt_val_cindices = []
         opt_test_cindices = []
         for p in params:
-
+            cfg = set_cfg_params(cfg, p)
             print(f"\nParam: {p}\n")
-            cfg.PARAMS = "LR" + str(p[0]) + "_L2" + str(p[1])
-            cfg.TRAIN.LR = p[0]
-            cfg.TRAIN.L2_COEFF = p[1]
-
-            if cfg.TRAIN.MODEL == "emd":
-                cfg.PARAMS += "_PRIOR" + str(p[2])
-                cfg.EMD.PRIOR = p[2]
 
             algo = get_algo(cfg, split_nb)
             score, concat_pred_test = algo.run()
