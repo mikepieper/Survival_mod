@@ -1,4 +1,5 @@
 import argparse
+import copy
 import datetime
 import itertools
 import os
@@ -10,6 +11,8 @@ import dateutil
 import dateutil.tz
 import numpy as np
 import torch
+from sklearn.model_selection import KFold
+
 
 from shutil import copyfile
 
@@ -60,7 +63,7 @@ def set_cfg_params(cfg, params):
     return cfg
 
 
-def run_cx_val(cfg):
+def create_grid_search(cfg):
     param_lr = [float(i) for i in cfg.TRAIN.LR]
     param_l2_coeff = [float(i) for i in cfg.TRAIN.L2_COEFF]
     if cfg.TRAIN.MODEL == "emd":
@@ -68,37 +71,46 @@ def run_cx_val(cfg):
         params = list(itertools.product(param_lr, param_l2_coeff, param_prior))
     else:
         params = list(itertools.product(param_lr, param_l2_coeff))
+    return params
+
+
+def run_cx_val(cfg):
+    """
+        Mike's Notes: I swapped the loops of params and split.
+        The previous approach took the best cindex across all params for each split.
+        This is backwards. It should be: For each param combo. Take the test cindex 
+        across all splits.
+    """
+    # kf = KFold(n_splits=5)
+    params_grid = create_grid_search(cfg)
 
     test_cindices = []
-    split_nbrs = eval(cfg.DATA.SPLITS)
-    split_nbrs = split_nbrs or [0, 1, 2, 3, 4]
-    for split_nb in split_nbrs:
+    splits = eval(cfg.DATA.SPLITS) or [0, 1, 2, 3, 4]
+    best_val_cindex, best_test_cindex, best_params = 0, 0, None
+    for split in splits:
+    # for params in params_grid:
 
-        print(f"\n\n\nSplit: {split_nb}")
+        print(f"\n\n\nSplit: {split}")
         opt_val_cindices = []
         opt_test_cindices = []
-        for p in params:
-            cfg = set_cfg_params(cfg, p)
-            print(f"\nParam: {p}\n")
+        for params in params_grid:
+        # for split in splits:
+            cfg = set_cfg_params(cfg, params)
+            print(f"\nParam: {params}\n")
 
-            algo = get_algo(cfg, split_nb)
-            results, concat_pred_test = algo.run()
+            results = get_algo(cfg, split).run()
 
             val_cindex = results['val']['c_index']
             test_cindex = results['test']['c_index']
-            print(f"\nVal c_index: {val_cindex}")
-            print(f"Test c_index: {test_cindex}")
 
             opt_val_cindices.append(val_cindex)
             opt_test_cindices.append(test_cindex)
 
         test_cindex = opt_test_cindices[np.argmax(opt_val_cindices)]
         test_cindices.append(test_cindex)
-        print(f"\nSplit test_cindex: {test_cindex}")
 
-    test_cindices = np.array(test_cindices)
     print(f"\n{test_cindices}")
-    print(f"\nTest cindex mean, std: {test_cindices.mean()}, {test_cindices.std()}")
+    print(f"\nTest cindex mean, std: {np.mean(test_cindices).round(3)}, {np.std(test_cindices).round(3)}")
 
 if __name__ == "__main__":
     # Loading arguments

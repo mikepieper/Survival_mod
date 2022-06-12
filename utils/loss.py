@@ -2,10 +2,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from utils.config import cfg
 
-
-def cox_loss_ties(pred, cens, tril, tied_matrix):
+def cox_loss_ties(pred, cens, tril, tied_matrix, use_cuda=False):
     """
     Compute the Efron version of the Cox loss. This version take into
     account the ties.
@@ -62,7 +60,7 @@ def cox_loss_ties(pred, cens, tril, tied_matrix):
     return loss
 
 
-def cox_loss_basic(pred, cens, tril, tied_matrix):
+def cox_loss_basic(pred, cens, tril, tied_matrix, use_cuda=False):
     """
     Compute the basic version of the Cox loss.
     Subjects i and j
@@ -98,7 +96,7 @@ def cox_loss_basic(pred, cens, tril, tied_matrix):
     exp_pred = torch.exp(pred)
     tril = np.tril(np.ones(tril.size(), dtype="float32"))
     tril = torch.from_numpy(tril)
-    if cfg.CUDA:
+    if use_cuda:
         tril = tril.cuda()
     # Sum of the exp pred of the risk pool for each i
     # sum_{j:y^j >= y^i} exp(h_{theta}(x^j)))
@@ -117,7 +115,7 @@ def cox_loss_basic(pred, cens, tril, tied_matrix):
     return loss
 
 
-def rank_loss(pred, rank, cens, f="RankingSVM"):
+def rank_loss(pred, rank, cens, f="RankingSVM", use_cuda=False):
     """
     Compute the ranking loss.
 
@@ -138,17 +136,14 @@ def rank_loss(pred, rank, cens, f="RankingSVM"):
         Ranking loss.
     """
     # Find acceptable pairs
-    mat_rank = rank.unsqueeze(0).repeat(rank.size(0), 1)
+    mat_rank = rank.squeeze().unsqueeze(0).repeat(rank.size(0), 1)
     mat_rank = mat_rank.transpose(1, 0) - mat_rank
     diagonal = torch.eye(mat_rank.size()[0])
-    if cfg.CUDA:
+    if use_cuda:
         diagonal = diagonal.cuda()
-    mat_rank = mat_rank - diagonal
-    mat_rank = mat_rank >= 0
-    mat_rank = mat_rank.float()
-    cens = cens.unsqueeze(0).repeat(cens.size(0), 1)
+    mat_rank = (mat_rank > diagonal).float()
+    cens = cens.squeeze().unsqueeze(0).repeat(cens.size(0), 1)
     mat_rank = mat_rank * cens
-
     # Differences between the pairs in the prediction
     t_diff = pred.transpose(1, 0).repeat(pred.size(0), 1)
     t_diff = t_diff.transpose(1, 0) - t_diff
@@ -172,7 +167,7 @@ def rank_loss(pred, rank, cens, f="RankingSVM"):
     return -loss
 
 
-def emd_loss(cdf_pred, cdf_time, weight_mat, exponent=1.5):
+def emd_loss(cdf_pred, cdf_time, weight_mat, exponent=1.5, use_cuda=False):
     """
     compute the EMD loss.
 

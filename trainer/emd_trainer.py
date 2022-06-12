@@ -4,9 +4,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from lifelines import KaplanMeierFitter
+
 from models import MLP
 from trainer.trainer_base import TrainerBase
-from utils.config import cfg
 from utils.loss import emd_loss
 
 
@@ -25,9 +26,10 @@ class EMDTrainer(TrainerBase):
         self.div_time = int(cfg.TRAIN.DIV_TIME)
         self.dtime_shape = math.ceil(self.time_shape / self.div_time)
 
-        self.model = MLP(input_shape=self.X_train_shape, output_shape=self.dtime_shape + 1)
-        if cfg.CUDA:
-            self.model.cuda()
+        self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=self.dtime_shape + 1)
+        if self.use_cuda:
+            self.model = self.model.cuda()
+
 
     def before_train(self, train_data):
         """
@@ -40,6 +42,7 @@ class EMDTrainer(TrainerBase):
         """
         self.get_distance_matrix(train_data)
 
+
     def get_distance_matrix(self, train_data):
         """
         Compute the distance matrix for EMD.
@@ -49,12 +52,11 @@ class EMDTrainer(TrainerBase):
         train_data : ndarray
             Training set.
         """
-
         non_c_event_times = train_data[:, 0][train_data[:, 1] == 1]
         hist = np.histogram(non_c_event_times.tolist(), bins=list(range(0, math.ceil(self.time_shape / self.div_time))))
         hist = hist[0]
 
-        prior = float(cfg.EMD.PRIOR)
+        prior = float(self.cfg.EMD.PRIOR)
         elts = (prior + hist).tolist()
         self.distance_mat = np.array([elt * (len(elts)) / (sum(elts)) for elt in elts])
         self.distance_mat = torch.from_numpy(self.distance_mat)
@@ -62,10 +64,11 @@ class EMDTrainer(TrainerBase):
         padding = torch.zeros(2)
         self.distance_mat = torch.cat([self.distance_mat, padding])
 
-        if cfg.CUDA:
+        if self.use_cuda:
             self.distance_mat = self.distance_mat.cuda()
 
-    def get_pred_loss(self, batch):
+
+    def forward(self, batch):
         """
         Compute the model loss and prediction.
 
@@ -81,14 +84,14 @@ class EMDTrainer(TrainerBase):
         loss : float
             Model loss.
         """
-        time, event, X, _, _ = self.process_batch(batch)
+        time, event, X = self.process_batch(batch)
 
         survival_estimate = self.survival_estimate[time.astype("int32")].astype("float32")
 
         # Creating tensors
         time = torch.from_numpy(time)
         event = torch.from_numpy(event)
-        if cfg.DATA.DEATH_AT_CENSOR_TIME:
+        if self.cfg.DATA.DEATH_AT_CENSOR_TIME:
             event = torch.ones(event.size())
         X = torch.from_numpy(X)
 
@@ -109,7 +112,7 @@ class EMDTrainer(TrainerBase):
 
         survival_estimate = torch.from_numpy(survival_estimate)
 
-        if cfg.CUDA:
+        if self.use_cuda:
             time = time.cuda()
             event = event.cuda()
             X = X.cuda()
@@ -120,7 +123,7 @@ class EMDTrainer(TrainerBase):
 
         # Prepare target
         time_step = torch.arange(0, self.dtime_shape).unsqueeze(0).repeat(X.size()[0], 1)
-        if cfg.CUDA:
+        if self.use_cuda:
             time_step = time_step.cuda()
 
         mat_time = time.unsqueeze(0).repeat(self.dtime_shape, 1).transpose(0, 1)
@@ -135,7 +138,7 @@ class EMDTrainer(TrainerBase):
         cdf_time = time_step + time_step_cens
 
         ones = torch.ones(X.size()[0], 1)
-        if cfg.CUDA:
+        if self.use_cuda:
             ones = ones.cuda()
 
         cdf_time_ = torch.cat((cdf_time, ones), 1)
@@ -148,3 +151,28 @@ class EMDTrainer(TrainerBase):
         concat_pred = torch.cat((concat_pred, rank_output), 1)
 
         return concat_pred, loss
+
+
+    def get_data_random_split(self):
+        train, val, test = super().get_data_random_split()
+        self.build_survival_estimate(train)
+        return train, val, test
+
+    def build_survival_estimate(self, train):
+        kmf = KaplanMeierFitter()
+        kmf.fit(train[:, 0], event_observed=train[:, 1])
+        timeline = np.array(kmf.survival_function_.index)
+        KM_estimate = kmf.survival_function_.values.flatten()
+        
+        survival = []
+        for i in range(self.time_shape):
+            surv = np.zeros(self.time_shape)
+            prob = 1.
+            for j in range(self.time_shape):
+                if j in timeline:
+                    idx = np.where(timeline == j)[0]
+                    prob = KM_estimate[idx]
+                surv[i] = prob
+            survival.append(surv)
+
+        self.survival_estimate = np.array(survival)

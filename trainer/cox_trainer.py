@@ -2,23 +2,68 @@ import torch
 
 from models import MLP
 from trainer.trainer_base import TrainerBase
-from utils.config import cfg
-from utils.loss import cox_loss_basic, cox_loss_ties, rank_loss
+from utils.loss import cox_loss_basic, cox_loss_ties
+from utils.utils import tgt_equal_tgt, tgt_leq_tgt
+
+import functools
+import pdb
 
 
 class CoxTrainer(TrainerBase):
-    def __init__(self, cfg, split):
+    
+    def __init__(self, cfg, data):
         """
-        Likelihood trainer.
+        Cox trainer.
+
+        Parameters
+        ----------
+        split : int
+            Split number.
         """
-        super().__init__(cfg, split)
+        super().__init__(cfg, data)
 
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=1)
         if self.use_cuda:
-            self.model.cuda()
+            self.model = self.model.cuda() # f"cuda:{self.cfg.GPU_ID}"
+    
+        if self.loss_type == "cox_loss_ties":
+            self.loss_fn = functools.partial(cox_loss_ties, use_cuda=self.use_cuda)
+        elif self.loss_type == "cox_loss_basic":
+            self.loss_fn = functools.partial(cox_loss_basic, use_cuda=self.use_cuda)
+        else:
+            raise ValueError("self.loss_type invalid")
 
 
-    def get_pred_loss(self, batch):
+    def process_time(self, time):
+        """
+        Process batch of time data to extract the explanatory 
+        variables matrix and, to compute
+        the lower triangle and diagonal by block matrix.
+
+        Parameters
+        ----------
+        data : ndarray
+            Data to process.
+
+        Returns
+        -------
+        tril : ndarray
+            Lower triangular matrix.
+        tied_matrix : ndarray
+            Diagonal by block matrix.
+        """
+        time = time.numpy()
+        tril = torch.from_numpy(tgt_leq_tgt(time))
+        tied_matrix = torch.from_numpy(tgt_equal_tgt(time))
+        
+        if self.use_cuda:
+            tril = tril.cuda()
+            tied_matrix = tied_matrix.cuda()
+
+        return tril, tied_matrix
+
+
+    def forward(self, batch):
         """
         Compute the model loss and prediction.
 
@@ -34,34 +79,9 @@ class CoxTrainer(TrainerBase):
         loss : float
             Model loss.
         """
-        time, event, X, tril, tied_matrix = self.process_batch(batch)
-
-        # Creating tensors
-        time = torch.from_numpy(time)
-        event = torch.from_numpy(event)
-        if cfg.DATA.DEATH_AT_CENSOR_TIME:
-            event = torch.ones(event.size())
-        X = torch.from_numpy(X)
-        tril = torch.from_numpy(tril)
-        tied_matrix = torch.from_numpy(tied_matrix)
-
-        if self.use_cuda:
-            time = time.cuda()
-            event = event.cuda()
-            X = X.cuda()
-            tril = tril.cuda()
-            tied_matrix = tied_matrix.cuda()
-
+        time, event, X = self.process_batch(batch)
         pred = self.model(X)
-
-        concat_pred = torch.cat((time.unsqueeze(-1), event.unsqueeze(-1)), 1)
-        concat_pred = torch.cat((concat_pred, pred), 1)
-
-        if self.loss_type == "cox_loss_ties":
-            loss = cox_loss_ties(pred, event, tril, tied_matrix)
-        elif self.loss_type == "cox_loss_basic":
-            loss = cox_loss_basic(pred, event, tril, tied_matrix)
-        else:
-            raise ValueError("self.loss_type invalid")
-
+        concat_pred = torch.cat((time, event, pred), 1)
+        tril, tied_matrix = self.process_time(time.cpu())
+        loss = self.loss_fn(pred, event, tril, tied_matrix)
         return concat_pred, loss

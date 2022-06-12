@@ -5,8 +5,6 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from utils.config import cfg
-
 
 CATEGORICAL_KEYS = {"aids3": ["state", "sex", "T.categ", "zid"],
                     "colon_death": ["rx", "sex", "obstruct", "perfor", "adhere", "nodes", "differ", "extent",
@@ -81,7 +79,7 @@ def continuous_nan(X, columns):
     return X_with_nan
 
 
-def load_data():
+def load_data(cfg):
     """
     General function to load the datasets.
 
