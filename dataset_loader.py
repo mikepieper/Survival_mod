@@ -145,7 +145,7 @@ def load_data(cfg):
     print(f"Nb unique t: {len(np.unique(y))}\nMin t: {np.min(y)}\nMax t: {np.max(y)}")
 
     if cfg.DATA.DATASET in ["aids3", "colon_death"]:
-        print(f"Nb of event: {Counter(data['status'])}")
+        print(f"Nb of event: {Counter(data[cfg.DATA.EVENT])}")
     elif cfg.DATA.DATASET == "support2":
         print(f"Nb of event: {Counter(data['death'])}")
 
