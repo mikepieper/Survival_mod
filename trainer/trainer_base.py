@@ -255,63 +255,37 @@ class TrainerBase(object):
         val = df_val.to_numpy()
         test = df_test.to_numpy()
 
-        train = self.preprocess_train(train)
-
         if self.cfg.DATA.ADD_CENS:
-            proba = self.cfg.DATA.PROBA
-            cens = train[train[:, 1] == 0]
-            non_cens = train[train[:, 1] == 1]
-
-            # Add censure cases in the event feature
-            p_ = proba - (cens.shape[0] / float(train.shape[0]))
-            p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
-            ev_new = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
-            non_cens[:, 1] = ev_new
-
-            # Modify target for new censured cases
-            new_cens = non_cens[non_cens[:, 1] == 0]
-            non_cens = non_cens[non_cens[:, 1] == 1]
-            tgt_ = new_cens[:, 0]
-            g_rand = lambda x: np.random.randint(x)
-            new_tgt = list(map(g_rand, tgt_))
-            new_cens[:, 0] = new_tgt
-
-            train = np.concatenate((cens, new_cens), axis=0)
-            train = np.concatenate((train, non_cens), axis=0)
+            train = self.add_cens_to_train(train)
 
         return train, val, test
 
 
-    def preprocess_train(self, train):
+    def add_cens_to_train(self, train):
         """
         Returns
         -------
         train : ndarray
             Training set.
-        val : ndarray
-            Validation set.
-        test : ndarray
-            Test set.
         """
-        if self.cfg.DATA.ADD_CENS:
-            proba = self.cfg.DATA.PROBA
-            cens = train[train[:, 1] == 0]
-            non_cens = train[train[:, 1] == 1]
+        proba = self.cfg.DATA.PROBA
+        cens = train[train[:, 1] == 0]
+        non_cens = train[train[:, 1] == 1]
 
-            # Add censure cases in the event feature
-            p_ = proba - (cens.shape[0] / float(train.shape[0]))
-            p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
-            non_cens[:, 1] = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
+        # Add censure cases in the event feature
+        p_ = proba - (cens.shape[0] / float(train.shape[0]))
+        p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
+        non_cens[:, 1] = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
 
-            # Modify target for new censured cases
-            new_cens = non_cens[non_cens[:, 1] == 0]
-            non_cens = non_cens[non_cens[:, 1] == 1]
-            tgt_ = new_cens[:, 0]
-            new_tgt = list(map(lambda x: np.random.randint(x), tgt_))
-            new_cens[:, 0] = new_tgt
+        # Modify target for new censured cases
+        new_cens = non_cens[non_cens[:, 1] == 0]
+        non_cens = non_cens[non_cens[:, 1] == 1]
+        tgt_ = new_cens[:, 0]
+        new_tgt = list(map(lambda x: np.random.randint(x), tgt_))
+        new_cens[:, 0] = new_tgt
 
-            train = np.concatenate((cens, new_cens), axis=0)
-            train = np.concatenate((train, non_cens), axis=0)
+        train = np.concatenate((cens, new_cens), axis=0)
+        train = np.concatenate((train, non_cens), axis=0)
 
         return train
 

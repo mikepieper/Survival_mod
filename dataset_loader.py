@@ -96,12 +96,9 @@ def load_data(cfg):
         Dictionary containing the list of continuous ('continuous_keys'),
         categorical ('categorical_keys') and all features ('col').
     """
+    # Load data
     path = os.path.join(cfg.DATA.PATH, f"{cfg.DATA.DATASET}.csv")
     data = pd.read_csv(path, delimiter=',', header=0, low_memory=False)
-    
-    # Load data
-    if cfg.DATA.DATASET == "colon_death":
-        data = data[data["etype"] == 2]
 
     # Prepare covariates matrix
     categorical_keys = cfg.DATA.CATEGORICAL_KEYS
