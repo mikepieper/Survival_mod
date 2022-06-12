@@ -86,14 +86,7 @@ class EMDTrainer(TrainerBase):
         """
         time, event, X = self.process_batch(batch)
 
-        survival_estimate = self.survival_estimate[time.astype("int32")].astype("float32")
-
-        # Creating tensors
-        time = torch.from_numpy(time)
-        event = torch.from_numpy(event)
-        if self.cfg.DATA.DEATH_AT_CENSOR_TIME:
-            event = torch.ones(event.size())
-        X = torch.from_numpy(X)
+        survival_estimate = self.survival_estimate[time.cpu().numpy().astype("int32")].astype("float32")
 
         if survival_estimate.shape[0] != X.shape[0]:
             survival_estimate = survival_estimate[:X.shape[0], :]
@@ -113,9 +106,6 @@ class EMDTrainer(TrainerBase):
         survival_estimate = torch.from_numpy(survival_estimate)
 
         if self.use_cuda:
-            time = time.cuda()
-            event = event.cuda()
-            X = X.cuda()
             survival_estimate = survival_estimate.cuda()
 
         time_output = self.model(X)
