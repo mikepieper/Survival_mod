@@ -8,6 +8,11 @@ DATA:
   PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD//datasets/'
   SPLITS: '[0, 1, 2, 3, 4]'
   DATASET: 'aids3'
+  CATEGORICAL_KEYS: ["state", "sex", "T.categ", "zid"]
+  CATEGORICAL_KEYS: ["age"]
+  TARGET: "target"
+  EVENT: "status"
+  NORMALIZE: True
 
 # Training options
 TRAIN:

@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-
+import pdb
 
 def cox_loss_ties(pred, cens, tril, tied_matrix, use_cuda=False):
     """
@@ -167,7 +167,7 @@ def rank_loss(pred, rank, cens, f="RankingSVM", use_cuda=False):
     return -loss
 
 
-def emd_loss(cdf_pred, cdf_time, weight_mat, exponent=1.5, use_cuda=False):
+def emd_loss(cdf_pred, cdf_time, weight_mat, exponent=1.5):
     """
     compute the EMD loss.
 

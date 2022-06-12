@@ -10,7 +10,7 @@ cfg = __C
 # Dataset name
 __C.CONFIG_NAME = ''
 __C.GPU_ID = '0'
-__C.CUDA = False
+__C.CUDA = True
 
 
 # Dataset options

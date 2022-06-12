@@ -10,9 +10,9 @@ from lifelines.utils import concordance_index
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import MinMaxScaler
 
-from datasets.dataset_loader import load_data
-from utils.utils import mkdir_p, iterate_minibatches, tgt_equal_tgt, tgt_leq_tgt, save_model, load_model
-from visualization.figures import plot_history
+from dataset_loader import load_data
+from utils.utils import mkdir_p, iterate_minibatches, save_model
+from visualization import plot_history
 
 
 class TrainerBase(object):
@@ -90,12 +90,12 @@ class TrainerBase(object):
         Load the data and extract input (and output in the case of EMD) shapes
         to be use by the model.
         """
-        data, dict_col = load_data(self.cfg)
+        data, self.dict_col = load_data(self.cfg)
+        
         self.X_train_shape = (-1, data.shape[1] - 2)
         if self.cfg.TRAIN.MODEL == "emd":
             self.time_shape = int(data[:, 0].max()) + 1
         self.data = data
-        self.dict_col = dict_col
 
     def before_train(self, train):
         pass

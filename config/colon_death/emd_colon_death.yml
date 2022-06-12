@@ -8,6 +8,12 @@ DATA:
   PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD/datasets/'
   SPLITS: '[0, 1, 2, 3, 4]'
   DATASET: 'colon_death'
+  CATEGORICAL_KEYS: ["rx", "sex", "obstruct", "perfor", "adhere", 
+                    "nodes", "differ", "extent", "surg", "node4"]
+  CONTINUOUS_KEYS: ["age"]
+  TARGET: "time"
+  EVENT: "status"
+  NORMALIZE: True
 
 # Training options
 TRAIN:
