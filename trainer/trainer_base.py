@@ -13,7 +13,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from datasets.dataset_loader import load_data
 from utils.config import cfg
-from utils.utils import mkdir_p, iterate_minibatches, tgt_equal_tgt, tgt_leq_tgt
+from utils.utils import mkdir_p, iterate_minibatches, tgt_equal_tgt, tgt_leq_tgt, save_model, load_model
 from visualization.figures import plot_history
 
 
@@ -103,7 +103,7 @@ class TrainerBase(object):
     def get_pred_loss(self, batch):
         raise
 
-    def run(self):
+    def run(self, save_best_model=False):
         train, val, test = self.get_data_random_split()
         self.before_train(train)
         split_id = f"split{self.split}"
@@ -196,11 +196,11 @@ class TrainerBase(object):
             plot_history(path, f"c_index_{split_id}", train_cindex_history, val_cindex_history)
 
             if val_c_index > best_c_index:
-                best_epoch = epoch
                 best_c_index = val_c_index
                 results['train'] = {'avg_loss': train_full_epoch_loss, 'c_index': train_c_index}
                 results['val'] = {'avg_loss': val_full_epoch_loss, 'c_index': val_c_index, 'best_epoch': epoch}
-                self.save_model("best" + split_id)
+                if save_best_model:
+                    save_model(self.model, os.path.join(self.cfg.OUTPUT_DIR, self.cfg.PARAMS, "Models"), "best.pth")
                 patience = 0
             else:
                 patience += 1
@@ -214,7 +214,6 @@ class TrainerBase(object):
         test_epoch_loss = 0
         test_iteration = 0
 
-        self.load_model_best(split_id)
         self.model.eval()
 
         for batch in iterate_minibatches(test, self.batch_size, shuffle=False):
@@ -235,9 +234,7 @@ class TrainerBase(object):
             # concordance_index(time, pred, event)
             test_c_index = concordance_index(concat_pred_test[:, 0], -concat_pred_test[:, 2], concat_pred_test[:, 1])
 
-
         results['test'] = {'avg_loss': test_full_epoch_loss, 'c_index': test_c_index}
-
         return results, concat_pred_test
 
     def get_data_random_split(self):
@@ -335,33 +332,3 @@ class TrainerBase(object):
 
         return train, val, test
 
-    def save_model(self, message):
-        """
-        Save the model.
-
-        Parameters
-        ----------
-        message : srt
-            Message to include in the path of the model to save.
-        """
-        path = os.path.join(cfg.OUTPUT_DIR, cfg.PARAMS, "Models/")
-        mkdir_p(os.path.dirname(path))
-
-        path_model = f"{path}model_epoch_{message}.pth"
-        torch.save(self.model.state_dict(), path_model)
-
-    def load_model_best(self, split_id):
-        """
-        Load best model for a given split id.
-
-        Parameters
-        ----------
-        split_id : str
-            Split id under the form "split{split#}".
-        """
-        path = os.path.join(cfg.OUTPUT_DIR, cfg.PARAMS, "Models/")
-        path = f"{path}model_epoch_best{split_id}.pth"
-
-        state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-        self.model.load_state_dict(state_dict)
-        print(f"\nLoad from: {path}")

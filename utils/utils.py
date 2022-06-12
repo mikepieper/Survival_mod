@@ -1,7 +1,11 @@
 import os
+import datetime
+import dateutil.tz
+from shutil import copyfile
 import errno
 
 import numpy as np
+import torch
 
 
 def mkdir_p(path):
@@ -37,9 +41,11 @@ def tgt_leq_tgt(time):
     tril: ndarray
         Lower triangular matrix.
     """
-    t_i = time.astype(np.float32).reshape(1, -1)
-    t_j = time.astype(np.float32).reshape(-1, 1)
-    tril = np.where(t_i <= t_j, 1., 0.).astype(np.float32)
+    time = time.astype(np.float32)
+    t_i = time.reshape(1, -1)
+    t_j = time.reshape(-1, 1)
+    tril = np.where(t_i <= t_j, 1., 0.)
+    tril = tril.astype(np.float32)
     return tril
 
 
@@ -59,9 +65,11 @@ def tgt_equal_tgt(time):
     tied_matrix: ndarray
         Diagonal by block matrix.
     """
-    t_i = time.astype(np.float32).reshape(1, -1)
-    t_j = time.astype(np.float32).reshape(-1, 1)
-    tied_matrix = np.where(t_i == t_j, 1., 0.).astype(np.float32)
+    time = time.astype(np.float32)
+    t_i = time.reshape(1, -1)
+    t_j = time.reshape(-1, 1)
+    tied_matrix = np.where(t_i == t_j, 1., 0.)
+    tied_matrix = tied_matrix.astype(np.float32)
 
     assert(tied_matrix.ndim == 2)
     block_sizes = np.sum(tied_matrix, axis=1)
@@ -102,3 +110,43 @@ def iterate_minibatches(data, batchsize=32, shuffle=False):
     if start_idx + batchsize != data.shape[0]:
         excerpt = slice(start_idx + batchsize, data.shape[0])
         yield data[excerpt]
+
+
+def create_output_dir(cfg, cfg_file):
+    # Create Timestamp
+    now = datetime.datetime.now(dateutil.tz.tzlocal())
+    timestamp = now.strftime("%Y_%m_%d_%H_%M_%S")
+    cfg.TIMESTAMP = timestamp
+    # Create Output Dir
+    output_dir = "results/%s_%s_%s" % (cfg.DATA.DATASET, cfg.CONFIG_NAME, timestamp)
+    cfg.OUTPUT_DIR = output_dir
+    mkdir_p(output_dir)
+    # Save config file
+    copyfile(cfg_file, os.path.join(output_dir, "config.yml"))
+
+
+def save_model(model, save_dir, filename):
+    """
+    Save the model.
+
+    Parameters
+    ----------
+    message : srt
+        Message to include in the path of the model to save.
+    """
+    mkdir_p(os.path.dirname(save_dir))
+    torch.save(model.state_dict(), os.path.join(save_dir, filename))
+
+
+def load_model(model, filepath):
+    """
+    Load best model for a given split id.
+
+    Parameters
+    ----------
+    split_id : str
+        Split id under the form "split{split#}".
+    """
+    state_dict = torch.load(filepath, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state_dict)
+    print(f"\nLoad from: {filepath}")
