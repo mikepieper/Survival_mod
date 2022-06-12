@@ -224,7 +224,6 @@ class TrainerBase(object):
         test : ndarray
             Test set.
         """
-
         kf = KFold(n_splits=5)
 
         index_train = []

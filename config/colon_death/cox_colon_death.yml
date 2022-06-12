@@ -13,7 +13,6 @@ DATA:
   CONTINUOUS_KEYS: ["age"]
   TARGET: "time"
   EVENT: "status"
-  NORMALIZE: True
 
 # Training options
 TRAIN:

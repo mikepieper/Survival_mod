@@ -9,10 +9,9 @@ DATA:
   SPLITS: '[0, 1, 2, 3, 4]'
   DATASET: 'aids3'
   CATEGORICAL_KEYS: ["state", "sex", "T.categ", "zid"]
-  CATEGORICAL_KEYS: ["age"]
-  TARGET: "target"
+  CONTINUOUS_KEYS: ["age"]
+  TARGET: "time"
   EVENT: "status"
-  NORMALIZE: True
 
 # Training options
 TRAIN:

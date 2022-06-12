@@ -6,17 +6,17 @@ import numpy as np
 import pandas as pd
 
 
-CATEGORICAL_KEYS = {"aids3": ["state", "sex", "T.categ", "zid"],
-                    "colon_death": ["rx", "sex", "obstruct", "perfor", "adhere", "nodes", "differ", "extent",
-                                    "surg", "node4"],
-                    "support2": ["sex", "income", "race", "ca", "dnr", "sfdm2", "dzgroup", "dzclass"]}
+# CATEGORICAL_KEYS = {"aids3": ["state", "sex", "T.categ", "zid"],
+#                     # "colon_death": ["rx", "sex", "obstruct", "perfor", "adhere", "nodes", "differ", "extent",
+#                     #                 "surg", "node4"],
+#                     "support2": ["sex", "income", "race", "ca", "dnr", "sfdm2", "dzgroup", "dzclass"]}
 
-CONTINIOUS_KEYS = {"aids3": ["age"],
-                   "colon_death": ["age"],
-                   "support2": ["age", "num.co", "edu", "scoma", "avtisst", "sps", "aps", "surv2m", "surv6m",
-                                "hday", "diabetes", "dementia", "prg2m", "prg6m", "dnrday", "meanbp", "wblc",
-                                "hrt", "resp", "temp", "pafi", "alb", "bili", "crea", "sod", "ph", "glucose",
-                                "bun", "urine", "adlp", "adls", "adlsc"]}
+# CONTINUOUS_KEYS = {"aids3": ["age"],
+#                 #    "colon_death": ["age"],
+#                    "support2": ["age", "num.co", "edu", "scoma", "avtisst", "sps", "aps", "surv2m", "surv6m",
+#                                 "hday", "diabetes", "dementia", "prg2m", "prg6m", "dnrday", "meanbp", "wblc",
+#                                 "hrt", "resp", "temp", "pafi", "alb", "bili", "crea", "sod", "ph", "glucose",
+#                                 "bun", "urine", "adlp", "adls", "adlsc"]}
 
 
 def categories_to_dummies(X, columns):
@@ -96,24 +96,16 @@ def load_data(cfg):
         Dictionary containing the list of continuous ('continuous_keys'),
         categorical ('categorical_keys') and all features ('col').
     """
+    path = os.path.join(cfg.DATA.PATH, f"{cfg.DATA.DATASET}.csv")
+    data = pd.read_csv(path, delimiter=',', header=0, low_memory=False)
+    
     # Load data
-    if cfg.DATA.DATASET == "aids3":
-        data = pd.read_csv(f"{cfg.DATA.PATH}Aids3.csv", index_col=0)
-
-    elif cfg.DATA.DATASET == "colon_death":
-        data = pd.read_csv(f"{cfg.DATA.PATH}colon_death.csv", index_col=0)
+    if cfg.DATA.DATASET == "colon_death":
         data = data[data["etype"] == 2]
 
-    elif cfg.DATA.DATASET == "support2":
-        path = os.path.join(cfg.DATA.PATH, f"{cfg.DATA.DATASET}.csv")
-        data = pd.read_csv(path, delimiter=',', header=0, low_memory=False)
-
-    else:
-        raise NotImplementedError()
-
     # Prepare covariates matrix
-    categorical_keys = CATEGORICAL_KEYS[cfg.DATA.DATASET]
-    continuous_keys = CONTINIOUS_KEYS[cfg.DATA.DATASET]
+    categorical_keys = cfg.DATA.CATEGORICAL_KEYS
+    continuous_keys = cfg.DATA.CONTINUOUS_KEYS
     X = data[categorical_keys + continuous_keys]
     X = categories_to_dummies(X, categorical_keys)
     X = continuous_nan(X, continuous_keys)
@@ -121,33 +113,14 @@ def load_data(cfg):
     dict_col = {'categorical_keys': categorical_keys, 'continuous_keys': continuous_keys, 'col': col}
     X = X.to_numpy()
 
-    if cfg.DATA.DATASET == "aids3":
-        # diag: (Julian) date of diagnosis.
-        # death: (Julian) date of death or end of observation.
-        y = data["stop"] - data["start"]
-        y = y.to_numpy()
-        # status: "A" (alive) or "D" (dead) at end of observation
-        y_cens = data[cfg.DATA.EVENT].to_numpy()
-
-    elif cfg.DATA.DATASET == "colon_death":
-        # Prepare targets matrix
-        y = data[cfg.DATA.TARGET].to_numpy()
-        # Prepare censure matrix
-        y_cens = data[cfg.DATA.EVENT].to_numpy().astype("float32")
-
-    elif cfg.DATA.DATASET == "support2":
-        # Prepare targets matrix
-        y = data["d.time"].to_numpy()
-        # Prepare censure matrix
-        y_cens = data["death"].to_numpy()
+    # Prepare targets matrix
+    y = data[cfg.DATA.TARGET].to_numpy()
+    # Prepare censure matrix
+    y_cens = data[cfg.DATA.EVENT].to_numpy().astype("float32")
 
     print(f"\nDataset {cfg.DATA.DATASET} info:\nNb. col: {len(col)}")
     print(f"Nb unique t: {len(np.unique(y))}\nMin t: {np.min(y)}\nMax t: {np.max(y)}")
-
-    if cfg.DATA.DATASET in ["aids3", "colon_death"]:
-        print(f"Nb of event: {Counter(data[cfg.DATA.EVENT])}")
-    elif cfg.DATA.DATASET == "support2":
-        print(f"Nb of event: {Counter(data['death'])}")
+    print(f"Nb of event: {Counter(data[cfg.DATA.EVENT])}")
 
     data = np.concatenate((y.reshape(-1, 1), y_cens.reshape(-1, 1)), axis=1)
     data = np.concatenate((data, X), axis=1)

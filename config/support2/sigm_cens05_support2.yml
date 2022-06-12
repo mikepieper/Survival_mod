@@ -8,6 +8,14 @@ DATA:
   PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD/datasets/'
   SPLITS: '[0, 1, 2, 3, 4]'
   DATASET: 'support2'
+  CATEGORICAL_KEYS: ["sex", "income", "race", "ca", "dnr", "sfdm2", "dzgroup", "dzclass"]
+  CONTINUOUS_KEYS: ["age", "num.co", "edu", "scoma", "avtisst", "sps", "aps", "surv2m", "surv6m",
+                                "hday", "diabetes", "dementia", "prg2m", "prg6m", "dnrday", "meanbp", "wblc",
+                                "hrt", "resp", "temp", "pafi", "alb", "bili", "crea", "sod", "ph", "glucose",
+                                "bun", "urine", "adlp", "adls", "adlsc"]
+  TARGET: "d.time"
+  EVENT: "death"
+  
   ADD_CENS: True
   PROBA: 0.5
 
