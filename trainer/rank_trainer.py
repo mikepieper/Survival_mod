@@ -10,7 +10,7 @@ import pdb
 class RankTrainer(TrainerBase):
     
     
-    def __init__(self, cfg, data):
+    def __init__(self, cfg):
         """
         Likelihood trainer.
 
@@ -19,7 +19,7 @@ class RankTrainer(TrainerBase):
         split : int
             Split number.
         """
-        super().__init__(cfg, data)
+        super().__init__(cfg)
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=1)
         if self.use_cuda:
             self.model = self.model.cuda()

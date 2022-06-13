@@ -11,7 +11,7 @@ import pdb
 
 class CoxTrainer(TrainerBase):
     
-    def __init__(self, cfg, data):
+    def __init__(self, cfg):
         """
         Cox trainer.
 
@@ -20,7 +20,7 @@ class CoxTrainer(TrainerBase):
         split : int
             Split number.
         """
-        super().__init__(cfg, data)
+        super().__init__(cfg)
 
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=1)
         if self.use_cuda:

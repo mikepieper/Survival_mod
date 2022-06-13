@@ -4,19 +4,8 @@ from collections import Counter
 
 import numpy as np
 import pandas as pd
-
-
-# CATEGORICAL_KEYS = {"aids3": ["state", "sex", "T.categ", "zid"],
-#                     # "colon_death": ["rx", "sex", "obstruct", "perfor", "adhere", "nodes", "differ", "extent",
-#                     #                 "surg", "node4"],
-#                     "support2": ["sex", "income", "race", "ca", "dnr", "sfdm2", "dzgroup", "dzclass"]}
-
-# CONTINUOUS_KEYS = {"aids3": ["age"],
-#                 #    "colon_death": ["age"],
-#                    "support2": ["age", "num.co", "edu", "scoma", "avtisst", "sps", "aps", "surv2m", "surv6m",
-#                                 "hday", "diabetes", "dementia", "prg2m", "prg6m", "dnrday", "meanbp", "wblc",
-#                                 "hrt", "resp", "temp", "pafi", "alb", "bili", "crea", "sod", "ph", "glucose",
-#                                 "bun", "urine", "adlp", "adls", "adlsc"]}
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import MinMaxScaler
 
 
 def categories_to_dummies(X, columns):
@@ -124,3 +113,71 @@ def load_data(cfg):
     data = data.astype("float32")
 
     return data, dict_col
+
+def build_kfold_splits(cfg, data, dict_col, k=5):
+    """
+    Generate random data splits of train/val/test using KFold cross validation.
+
+    Returns
+    -------
+    train : ndarray
+        Training set.
+    val : ndarray
+        Validation set.
+    test : ndarray
+        Test set.
+    """
+    kf = KFold(n_splits=k)
+    time_shape = int(data[:, 0].max()) + 1
+    for train_val_idxs, test_idxs in kf.split(data):
+        train_idxs = train_val_idxs[:int(len(train_val_idxs)*0.65)]
+        val_idxs = train_val_idxs[int(len(train_val_idxs)*0.65):]
+
+        columns = ["time", "event"] + dict_col['col']
+        df_train = pd.DataFrame(data=data[train_idxs], columns=columns)
+        df_val = pd.DataFrame(data=data[val_idxs], columns=columns)
+        df_test = pd.DataFrame(data=data[test_idxs], columns=columns)
+
+        if cfg.DATA.NORMALIZE:
+            scaler = MinMaxScaler()
+            cont_cols = dict_col['continuous_keys']
+            df_train[cont_cols] = scaler.fit_transform(df_train[cont_cols])
+            df_val[cont_cols] = scaler.transform(df_val[cont_cols])
+            df_test[cont_cols] = scaler.transform(df_test[cont_cols])
+
+        train = df_train.to_numpy()
+        val = df_val.to_numpy()
+        test = df_test.to_numpy()
+
+        if cfg.DATA.ADD_CENS:
+            train = add_cens_to_train(cfg.DATA.PROBA, train)
+
+        yield train, val, test
+
+
+def add_cens_to_train(proba, train):
+    """
+    Returns
+    -------
+    train : ndarray
+        Training set.
+    """
+    cens = train[train[:, 1] == 0]
+    non_cens = train[train[:, 1] == 1]
+
+    # Add censure cases in the event feature
+    p_ = proba - (cens.shape[0] / float(train.shape[0]))
+    p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
+    non_cens[:, 1] = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
+
+    # Modify target for new censured cases
+    new_cens = non_cens[non_cens[:, 1] == 0]
+    non_cens = non_cens[non_cens[:, 1] == 1]
+    tgt_ = new_cens[:, 0]
+    new_tgt = list(map(lambda x: np.random.randint(x), tgt_))
+    new_cens[:, 0] = new_tgt
+
+    train = np.concatenate((cens, new_cens), axis=0)
+    train = np.concatenate((train, non_cens), axis=0)
+
+    return train

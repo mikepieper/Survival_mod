@@ -3,12 +3,12 @@ from .emd_trainer import EMDTrainer
 from .rank_trainer import RankTrainer
 
 
-def get_algo(cfg, split):
+def get_algo(cfg):
     if cfg.TRAIN.MODEL == "cox":
-        return CoxTrainer(cfg, split)
+        return CoxTrainer(cfg)
     elif cfg.TRAIN.MODEL == "emd":
-        return EMDTrainer(cfg, split)
+        return EMDTrainer(cfg)
     elif cfg.TRAIN.MODEL == "rank":
-        return RankTrainer(cfg, split)
+        return RankTrainer(cfg)
     else:
         raise NotImplementedError()

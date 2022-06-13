@@ -12,11 +12,11 @@ from utils.loss import emd_loss
 
 
 class EMDTrainer(TrainerBase):
-    def __init__(self, cfg, split):
+    def __init__(self, cfg):
         """
         EMD trainer.
         """
-        super(EMDTrainer, self).__init__(cfg, split)
+        super(EMDTrainer, self).__init__(cfg)
 
         if self.loss_type == "emd_loss":
             self.emd_loss = emd_loss
@@ -24,8 +24,9 @@ class EMDTrainer(TrainerBase):
             raise NotImplementedError()
 
         self.div_time = int(cfg.TRAIN.DIV_TIME)
+        self.time_shape = cfg.time_shape
         self.dtime_shape = math.ceil(self.time_shape / self.div_time)
-
+       
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=self.dtime_shape + 1)
         if self.use_cuda:
             self.model = self.model.cuda()
@@ -166,3 +167,10 @@ class EMDTrainer(TrainerBase):
             survival.append(surv)
 
         self.survival_estimate = np.array(survival)
+
+    def predict_batch(self, batch):
+        X = batch[:,2:]
+        X = torch.from_numpy(X)
+        time_output = F.softmax(self.model(X), 1)
+        cdf_pred = torch.cumsum(time_output, 1).detach().numpy()
+        return cdf_pred

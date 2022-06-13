@@ -13,35 +13,28 @@ from sklearn.preprocessing import MinMaxScaler
 from dataset_loader import load_data
 from utils.utils import mkdir_p, iterate_minibatches, save_model
 from visualization import plot_history
-
+import pdb
 
 class TrainerBase(object):
 
-    def __init__(self, cfg, split):
+    def __init__(self, cfg):
         """
         Trainer base class object.
         """
         self.cfg = cfg
-
         self.verbose = bool(cfg.VERBOSE)
         self.dataset = cfg.DATA.DATASET
-        self.split = split
-
         self.data_path = cfg.DATA.PATH
-
         self.batch_size = cfg.TRAIN.BATCH_SIZE
         self.max_patience = cfg.TRAIN.PATIENCE
-
         self.num_epochs = cfg.TRAIN.MAX_EPOCH
         self.model_name = cfg.TRAIN.MODEL
         self.loss_type = cfg.TRAIN.LOSS_TYPE
         self.learning_rate = float(self.cfg.TRAIN.LR)
         self.l2_coeff = float(self.cfg.TRAIN.L2_COEFF)
-        self.get_data()
-
         self.use_cuda = cfg.CUDA
+        self.X_train_shape = cfg.train_shape
         self.model = None
-        # self.X_train_shape = (-1, data.shape[1] - 2)
 
     def process_batch(self, data):
         """
@@ -84,18 +77,7 @@ class TrainerBase(object):
             X = X.cuda()
 
         return time, event, X
-    
-    def get_data(self):
-        """
-        Load the data and extract input (and output in the case of EMD) shapes
-        to be use by the model.
-        """
-        data, self.dict_col = load_data(self.cfg)
-        
-        self.X_train_shape = (-1, data.shape[1] - 2)
-        if self.cfg.TRAIN.MODEL == "emd":
-            self.time_shape = int(data[:, 0].max()) + 1
-        self.data = data
+
 
     def before_train(self, train):
         pass
@@ -103,12 +85,13 @@ class TrainerBase(object):
     def forward(self, batch):
         raise
 
-    def run(self, save_best_model=False):
-        train, val, test = self.get_data_random_split()
+    def run(self, train, val, test, split, save_best_model=False):
+        # Extract input (and output in the case of EMD) shapes
+        # to be use by the model.
+        self.X_train_shape = (-1, train.shape[1] - 2)
         if self.cfg.DATA.NO_CENSORED_DATA:
             train = train[train[:, 1] == 1]
         self.before_train(train)
-        split_id = f"split{self.split}"
 
         results = {}
 
@@ -123,14 +106,15 @@ class TrainerBase(object):
         optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.l2_coeff)
 
         best_c_index = -np.inf
-
+        
+        flip = False
         for epoch in range(self.num_epochs):
 
             # Train
-            concat_pred_train = np.array([]).reshape(0, 3)
+            self.model.train()
             train_epoch_loss = 0
             train_iteration = 0
-            self.model.train()
+            preds = np.array([]).reshape(0, 3)
             for batch in iterate_minibatches(train, self.batch_size, shuffle=True):
                 concat_pred, loss = self.forward(batch)
 
@@ -138,42 +122,44 @@ class TrainerBase(object):
                 loss.backward()
                 optimizer.step()
 
-                concat_pred_train = np.concatenate((concat_pred_train, concat_pred.data.cpu().numpy()), axis=0)
+                preds = np.concatenate((preds, concat_pred.data.cpu().numpy()), axis=0)
                 train_epoch_loss += loss.data.item()
                 train_iteration += 1
 
             # Record and print result after each epoch
             train_loss = train_epoch_loss / train_iteration
             train_loss_history.append(train_loss)
-            train_c_index = concordance_index(concat_pred_train[:, 0], concat_pred_train[:, 2], concat_pred_train[:, 1])
-            if train_c_index < 0.5:
-                train_c_index = concordance_index(concat_pred_train[:, 0], -concat_pred_train[:, 2], concat_pred_train[:, 1])
+            train_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
+            flip = False if train_c_index >= 0.5 else True
+            if flip:
+                preds[:, 2] = -preds[:, 2]
+            train_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
             train_cindex_history.append(train_c_index)
 
             # Val
-            concat_pred_val = np.array([]).reshape(0, 3)
+            self.model.eval()
             val_epoch_loss = 0
             val_iteration = 0
-            self.model.eval()
+            preds = np.array([]).reshape(0, 3)
             for batch in iterate_minibatches(val, self.batch_size):
                 concat_pred, loss = self.forward(batch)
-                concat_pred_val = np.concatenate((concat_pred_val, concat_pred.data.cpu().numpy()), axis=0)
+                preds = np.concatenate((preds, concat_pred.data.cpu().numpy()), axis=0)
                 val_epoch_loss += loss.data.item()
                 val_iteration += 1
 
             # Record and print result after each epoch
             val_loss = val_epoch_loss / val_iteration
             val_loss_history.append(val_loss)
-            val_c_index = concordance_index(concat_pred_val[:, 0], concat_pred_val[:, 2], concat_pred_val[:, 1])
-            if val_c_index < 0.5:
-                val_c_index = concordance_index(concat_pred_val[:, 0], -concat_pred_val[:, 2], concat_pred_val[:, 1])
+            if flip:
+                preds[:, 2] = -preds[:, 2]
+            val_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
             val_cindex_history.append(val_c_index)
 
             # Plot training and validation curve
             path = os.path.join(self.cfg.OUTPUT_DIR, self.cfg.PARAMS, "Figures/")
             mkdir_p(os.path.dirname(path))
-            plot_history(path, f"error_{split_id}", train_loss_history, val_loss_history)
-            plot_history(path, f"c_index_{split_id}", train_cindex_history, val_cindex_history)
+            plot_history(path, f"error_split_{split}", train_loss_history, val_loss_history)
+            plot_history(path, f"c_index_split_{split}", train_cindex_history, val_cindex_history)
 
             if val_c_index > best_c_index:
                 best_c_index = val_c_index
@@ -189,105 +175,99 @@ class TrainerBase(object):
                 break
 
 
-        concat_pred_test = np.array([]).reshape(0, 3)
-
+        self.model.eval()
         test_epoch_loss = 0
         test_iteration = 0
-        self.model.eval()
+        preds = np.array([]).reshape(0, 3)
         for batch in iterate_minibatches(test, self.batch_size, shuffle=False):
             concat_pred, loss = self.forward(batch)
-            concat_pred_test = np.concatenate((concat_pred_test, concat_pred.data.cpu().numpy()), axis=0)
+            preds = np.concatenate((preds, concat_pred.data.cpu().numpy()), axis=0)
             test_epoch_loss += loss.data.item()
             test_iteration += 1
 
         test_loss = test_epoch_loss / test_iteration
-
-        test_c_index = concordance_index(concat_pred_test[:, 0], concat_pred_test[:, 2], concat_pred_test[:, 1])
-
-        if test_c_index < 0.5:
-            test_c_index = concordance_index(concat_pred_test[:, 0], -concat_pred_test[:, 2], concat_pred_test[:, 1])
+        if flip:
+            preds[:, 2] = -preds[:, 2]
+        test_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
 
         results['test'] = {'avg_loss': test_loss, 'c_index': test_c_index}
         return results
 
+    
+    # def build_kfold_splits(self):
+    #     """
+    #     Generate random data splits of train/val/test using KFold cross validation.
 
-    def get_data_random_split(self):
-        """
-        Get data split train/val/test from  5Fold cross-validation.
+    #     Returns
+    #     -------
+    #     train : ndarray
+    #         Training set.
+    #     val : ndarray
+    #         Validation set.
+    #     test : ndarray
+    #         Test set.
+    #     """
+    #     kf = KFold(n_splits=5)
 
-        Returns
-        -------
-        train : ndarray
-            Training set.
-        val : ndarray
-            Validation set.
-        test : ndarray
-            Test set.
-        """
-        kf = KFold(n_splits=5)
-
-        index_train = []
-        index_valid = []
-        index_test = []
-        for train, test in kf.split(self.data):
-            index_train.append(train[:int(len(self.data)*0.6)])
-            index_valid.append(train[int(len(self.data)*0.6):])
-            index_test.append(test)
-
-        if self.split is not None:
-            train = self.data[index_train[self.split]]
-            val = self.data[index_valid[self.split]]
-            test = self.data[index_test[self.split]]
-        else:
-            raise NotImplementedError()
-
-        # Normalise the data
-        col_name = ["time", "event"] + self.dict_col['col']
-        df_train = pd.DataFrame(data=train, columns=col_name)
-        df_val = pd.DataFrame(data=val, columns=col_name)
-        df_test = pd.DataFrame(data=test, columns=col_name)
-        scaler = MinMaxScaler()
-        df_train[self.dict_col['continuous_keys']] = scaler.fit_transform(df_train[self.dict_col['continuous_keys']])
-        df_val[self.dict_col['continuous_keys']] = scaler.transform(df_val[self.dict_col['continuous_keys']])
-        df_test[self.dict_col['continuous_keys']] = scaler.transform(df_test[self.dict_col['continuous_keys']])
-
-        train = df_train.to_numpy()
-        val = df_val.to_numpy()
-        test = df_test.to_numpy()
-
-        if self.cfg.DATA.ADD_CENS:
-            train = self.add_cens_to_train(train)
-
-        return train, val, test
+    #     self.index_train = []
+    #     self.index_valid = []
+    #     self.index_test = []
+    #     for train, test in kf.split(self.data):
+    #         self.index_train.append(train[:int(len(self.data)*0.65)])
+    #         self.index_valid.append(train[int(len(self.data)*0.65):])
+    #         self.index_test.append(test)
 
 
-    def add_cens_to_train(self, train):
-        """
-        Returns
-        -------
-        train : ndarray
-            Training set.
-        """
-        proba = self.cfg.DATA.PROBA
-        cens = train[train[:, 1] == 0]
-        non_cens = train[train[:, 1] == 1]
+    # def get_data_random_split(self, split):
+    #     columns = ["time", "event"] + self.dict_col['col']
+    #     df_train = pd.DataFrame(data=self.data[self.index_train[self.split]], columns=columns)
+    #     df_val = pd.DataFrame(data=self.data[self.index_valid[self.split]], columns=columns)
+    #     df_test = pd.DataFrame(data=self.data[self.index_test[self.split]], columns=columns)
 
-        # Add censure cases in the event feature
-        p_ = proba - (cens.shape[0] / float(train.shape[0]))
-        p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
-        non_cens[:, 1] = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
+    #     if self.cfg.DATA.NORMALIZE:
+    #         scaler = MinMaxScaler()
+    #         cont_cols = self.dict_col['continuous_keys']
+    #         df_train[cont_cols] = scaler.fit_transform(df_train[cont_cols])
+    #         df_val[cont_cols] = scaler.transform(df_val[cont_cols])
+    #         df_test[cont_cols] = scaler.transform(df_test[cont_cols])
 
-        # Modify target for new censured cases
-        new_cens = non_cens[non_cens[:, 1] == 0]
-        non_cens = non_cens[non_cens[:, 1] == 1]
-        tgt_ = new_cens[:, 0]
-        new_tgt = list(map(lambda x: np.random.randint(x), tgt_))
-        new_cens[:, 0] = new_tgt
+    #     train = df_train.to_numpy()
+    #     val = df_val.to_numpy()
+    #     test = df_test.to_numpy()
 
-        train = np.concatenate((cens, new_cens), axis=0)
-        train = np.concatenate((train, non_cens), axis=0)
+    #     if self.cfg.DATA.ADD_CENS:
+    #         train = self.add_cens_to_train(train)
 
-        return train
+    #     return train, val, test
+
+
+    # def add_cens_to_train(self, train):
+    #     """
+    #     Returns
+    #     -------
+    #     train : ndarray
+    #         Training set.
+    #     """
+    #     proba = self.cfg.DATA.PROBA
+    #     cens = train[train[:, 1] == 0]
+    #     non_cens = train[train[:, 1] == 1]
+
+    #     # Add censure cases in the event feature
+    #     p_ = proba - (cens.shape[0] / float(train.shape[0]))
+    #     p_ = (train.shape[0] * p_) / float(non_cens.shape[0])
+    #     non_cens[:, 1] = np.random.binomial(size=non_cens.shape[0], n=1, p=1-p_)
+
+    #     # Modify target for new censured cases
+    #     new_cens = non_cens[non_cens[:, 1] == 0]
+    #     non_cens = non_cens[non_cens[:, 1] == 1]
+    #     tgt_ = new_cens[:, 0]
+    #     new_tgt = list(map(lambda x: np.random.randint(x), tgt_))
+    #     new_cens[:, 0] = new_tgt
+
+    #     train = np.concatenate((cens, new_cens), axis=0)
+    #     train = np.concatenate((train, non_cens), axis=0)
+
+    #     return train
 
     
 
