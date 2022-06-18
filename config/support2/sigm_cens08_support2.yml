@@ -5,7 +5,6 @@ VERBOSE: False
 
 # Dataset options
 DATA:
-  PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD/datasets/'
   DATASET: 'support2'
   CATEGORICAL_KEYS: ["sex", "income", "race", "ca", "dnr", "sfdm2", "dzgroup", "dzclass"]
   CONTINUOUS_KEYS: ["age", "num.co", "edu", "scoma", "avtisst", "sps", "aps", "surv2m", "surv6m",

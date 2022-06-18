@@ -13,6 +13,7 @@ from sklearn.preprocessing import MinMaxScaler
 from dataset_loader import load_data
 from utils.utils import mkdir_p, iterate_minibatches, save_model
 from visualization import plot_history
+
 import pdb
 
 class TrainerBase(object):

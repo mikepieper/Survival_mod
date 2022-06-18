@@ -5,7 +5,6 @@ VERBOSE: False
 
 # Dataset options
 DATA:
-  PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD/datasets/'
   DATASET: 'aids3'
   CATEGORICAL_KEYS: ["state", "sex", "T.categ", "zid"]
   CONTINUOUS_KEYS: ["age"]

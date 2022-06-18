@@ -14,7 +14,6 @@ from dataset_loader import build_kfold_splits, load_data
 import torch
 from copy import deepcopy
 
-
 from shutil import copyfile
 
 from trainer import get_algo
@@ -173,6 +172,10 @@ if __name__ == "__main__":
     torch.manual_seed(args.manual_seed)
     if cfg.CUDA:
         torch.cuda.manual_seed_all(args.manual_seed)
+
+    # This ./datasets is the default data folder to be set at cfg.DATA.PATH
+    if 'PATH' not in cfg.DATA:
+        cfg.DATA['PATH'] = './datasets'
 
     create_output_dir(cfg, args.cfg_file)
     run_cx_val(cfg)

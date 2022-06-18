@@ -5,7 +5,6 @@ VERBOSE: False
 
 # Dataset options
 DATA:
-  PATH: '/local_workspace/piepmike/Survival_Pytorch_EMD/datasets/'
   DATASET: 'colon_death'
   CATEGORICAL_KEYS: ["rx", "sex", "obstruct", "perfor", "adhere", "nodes", "differ", "extent", "surg", "node4"]
   CONTINUOUS_KEYS: ["age"]
