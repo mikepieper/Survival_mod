@@ -41,6 +41,7 @@ class EMDTrainer(TrainerBase):
         train_data : ndarray
             Training set.
         """
+        self.build_survival_estimate(train_data)
         self.get_distance_matrix(train_data)
 
 
@@ -86,6 +87,7 @@ class EMDTrainer(TrainerBase):
             Model loss.
         """
         time, event, X = self.process_batch(batch)
+        self.build_survival_estimate(batch)
 
         survival_estimate = self.survival_estimate[time.cpu().numpy().astype("int32")].astype("float32")
 
