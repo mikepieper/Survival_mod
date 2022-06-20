@@ -100,7 +100,7 @@ def load_data(cfg):
     X = X.to_numpy()
 
     # Prepare targets matrix
-    y = data[cfg.DATA.TARGET].to_numpy()
+    y = data[cfg.DATA.TARGET].to_numpy() / 365 # (HARDCODED FOR NOW) Convert to years
     # Prepare censure matrix
     y_cens = data[cfg.DATA.EVENT].to_numpy().astype("float32")
 

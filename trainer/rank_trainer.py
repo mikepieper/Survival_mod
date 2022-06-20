@@ -22,7 +22,7 @@ class RankTrainer(TrainerBase):
         super().__init__(cfg)
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=1)
         if self.use_cuda:
-            self.model = self.model.cuda()
+            self.model = self.model.cuda(f"cuda:{self.cfg.GPU_ID}")
 
         self.loss_fn = functools.partial(rank_loss, f=self.cfg.TRAIN.F_RANK, use_cuda=self.use_cuda)
 

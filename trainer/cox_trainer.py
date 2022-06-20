@@ -24,7 +24,7 @@ class CoxTrainer(TrainerBase):
 
         self.model = MLP(cfg, input_shape=self.X_train_shape, output_shape=1)
         if self.use_cuda:
-            self.model = self.model.cuda() # f"cuda:{self.cfg.GPU_ID}"
+            self.model = self.model.cuda(f"cuda:{self.cfg.GPU_ID}")
     
         if self.loss_type == "cox_loss_ties":
             self.loss_fn = functools.partial(cox_loss_ties, use_cuda=self.use_cuda)
