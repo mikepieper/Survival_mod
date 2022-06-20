@@ -112,6 +112,8 @@ class TrainerBase(object):
         for epoch in range(self.num_epochs):
 
             # Train
+            if self.verbose:
+                print(f"\nRunning training epoch {epoch} ...")
             self.model.train()
             train_epoch_loss = 0
             train_iteration = 0
@@ -129,15 +131,21 @@ class TrainerBase(object):
 
             # Record and print result after each epoch
             train_loss = train_epoch_loss / train_iteration
+            if self.verbose:
+                print(f"===> Epoch {epoch} Complete: Avg. Train Loss: {train_loss:.4f}")
             train_loss_history.append(train_loss)
             train_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
             flip = False if train_c_index >= 0.5 else True
             if flip:
                 preds[:, 2] = -preds[:, 2]
             train_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
+            if self.verbose:
+                print(f"===> Epoch {epoch} Complete: Train C-index: {train_c_index:.4f}")
             train_cindex_history.append(train_c_index)
 
             # Val
+            if self.verbose:
+                print(f"Running validation epoch {epoch} ...")
             self.model.eval()
             val_epoch_loss = 0
             val_iteration = 0
@@ -150,10 +158,15 @@ class TrainerBase(object):
 
             # Record and print result after each epoch
             val_loss = val_epoch_loss / val_iteration
+            if self.verbose:
+                print(f"===> Epoch {epoch} Complete: Avg. Val Loss: {val_loss:.4f}")
             val_loss_history.append(val_loss)
+            
             if flip:
                 preds[:, 2] = -preds[:, 2]
             val_c_index = concordance_index(preds[:, 0], preds[:, 2], preds[:, 1])
+            if self.verbose:
+                print(f"===> Epoch {epoch} Complete: Val C-index: {val_c_index:.4f}")
             val_cindex_history.append(val_c_index)
 
             # Plot training and validation curve
@@ -173,9 +186,12 @@ class TrainerBase(object):
                 patience += 1
 
             if patience > self.max_patience:
+                if self.verbose:
+                    print("Max patience reached, ending training")
                 break
 
-
+        if self.verbose:
+            print(f"Running test...")
         self.model.eval()
         test_epoch_loss = 0
         test_iteration = 0

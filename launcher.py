@@ -13,8 +13,7 @@ import numpy as np
 from dataset_loader import build_kfold_splits, load_data
 import torch
 from copy import deepcopy
-
-from shutil import copyfile
+from pprint import pprint
 
 from trainer import get_algo
 from utils.config import cfg, cfg_from_file
@@ -96,15 +95,17 @@ def run_cx_val(original_cfg):
     best_val_cindex, best_params = 0, None
     best_test_cindices = []
     for params in params_grid:
-        print(f"\nParam: {params}\n")
+        print(f"\n\nParam: {params}\n")
         cfg = set_cfg_params(deepcopy(original_cfg), params)
         
         val_cindices, test_cindices = [], []
         for split, (train, val, test) in enumerate(build_kfold_splits(original_cfg, data, dict_col)):
+            print(f"Split: {split}")
             algo = get_algo(cfg)
             results = algo.run(train, val, test, split)
             val_cindices.append(results['val']['c_index'])
             test_cindices.append(results['test']['c_index'])
+            pprint(results)
 
         mean_val_cindex = np.mean(val_cindices)
         if mean_val_cindex > best_val_cindex:
